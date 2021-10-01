@@ -4,4 +4,4 @@ from __future__ import absolute_import
 
 from .rw_file_lock import *
 
-__version__ = version = '0.1.0'
+__version__ = version = '0.1.1'
