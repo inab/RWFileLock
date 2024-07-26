@@ -1,4 +1,5 @@
 .py*env/
+.r*/
 py*env/
 __pycache__
 build/

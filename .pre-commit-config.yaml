@@ -1,0 +1,51 @@
+fail_fast: true
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    # This is the last version supporting python 3.7
+    rev: v4.4.0
+    hooks:
+      # This one has been added to fail fast on syntax errors
+      # before running expensive pylint
+      - id: check-ast
+        types_or:
+          - python
+          - pyi
+        exclude: "/(site-packages|development-[^/]*|docs|node_modules|__pycache__|\\..*)/$"
+      - id: check-yaml
+        types: [file]
+        files: \.(yaml|yml)$
+
+  - repo: https://github.com/pylint-dev/pylint.git
+    # This is the last version supporting python 3.7
+    rev: v2.17.7
+    hooks:
+      - id: pylint
+        alias: mirrorpylint
+        require_serial: true
+        types:
+          - python
+        exclude: "^[^/]*env/|dev-[^/]*/|docs/"
+#        entry: env PYTHONPATH=. pylint
+        args: [-j, "4", --source-roots, .]
+
+  - repo: https://github.com/pre-commit/mirrors-mypy.git
+    # This is the last version supporting python 3.7
+    rev: v1.4.1
+    hooks:
+      - id: mypy
+        alias: mirrormypy
+        types_or:
+          - python
+          - pyi
+        exclude: "/(site-packages|development-[^/]*|docs|node_modules|__pycache__|\\..*)/$"
+        require_serial: true
+#        entry: env PYTHONPATH=. mypy
+        args: [--strict, --show-error-codes, --no-warn-unused-ignores, --python-executable, .r/bin/python]
+
+  - repo: https://github.com/ambv/black.git
+    # This is the last version supporting python 3.7
+    rev: 23.3.0
+    hooks:
+      - id: black
+        exclude: "^[^/]*env/|development-[^/]*/|docs/"
