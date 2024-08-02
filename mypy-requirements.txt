@@ -1,1 +1,2 @@
 types-setuptools
+typing_extensions

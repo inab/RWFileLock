@@ -26,7 +26,10 @@ import contextlib
 import tempfile
 import fcntl
 
-from typing import TYPE_CHECKING
+from typing import (
+    cast,
+    TYPE_CHECKING,
+)
 
 if TYPE_CHECKING:
     from typing import (
@@ -35,6 +38,14 @@ if TYPE_CHECKING:
         Union,
     )
 
+    from typing_extensions import (
+        Protocol,
+    )
+
+    class FilenoProtocol(Protocol):
+        def fileno(self) -> "int":
+            ...
+
 
 class LockError(Exception):
     def __init__(self, message: "str"):
@@ -42,43 +53,64 @@ class LockError(Exception):
 
 
 class RWFileLock(object):
-    def __init__(self, filename: "Union[str, os.PathLike[str]]"):
-        self.lock_fd = os.open(filename, (os.O_RDWR | os.O_CREAT), mode=0o700)
+    def __init__(self, filename: "Union[str, os.PathLike[str], int, FilenoProtocol]"):
+        if hasattr(filename, "fileno") and callable(getattr(filename, "fileno")):
+            self.lock_fd = filename.fileno()
+            self.should_close = False
+        elif isinstance(filename, int):
+            self.lock_fd = filename
+            self.should_close = False
+        else:
+            self.lock_fd = os.open(
+                cast("Union[str, os.PathLike[str]]", filename),
+                (os.O_RDWR | os.O_CREAT),
+                mode=0o700,
+            )
+            self.should_close = True
+
         self.isLocked = False
+        self.isShareLock = False
 
     def r_lock(self) -> "None":
-        if self.isLocked:
+        if self.isLocked and self.isShareLock:
             raise LockError("Already locked by ourselves")
 
         try:
             fcntl.lockf(self.lock_fd, (fcntl.LOCK_SH | fcntl.LOCK_NB))
             self.isLocked = True
+            self.isShareLock = True
         except IOError:
             raise LockError("Already locked by others")
 
     def r_blocking_lock(self) -> "None":
-        if self.isLocked:
+        if self.isLocked and self.isShareLock:
             raise LockError("Already locked by ourselves")
 
         fcntl.lockf(self.lock_fd, fcntl.LOCK_SH)
         self.isLocked = True
+        self.isShareLock = True
 
     def w_lock(self) -> "None":
-        if self.isLocked:
+        if self.isLocked and not self.isShareLock:
             raise LockError("Already locked by ourselves")
 
         try:
             fcntl.lockf(self.lock_fd, (fcntl.LOCK_EX | fcntl.LOCK_NB))
             self.isLocked = True
+            self.isShareLock = False
         except IOError:
             raise LockError("Already locked by others")
 
     def w_blocking_lock(self) -> "None":
-        if self.isLocked:
+        if self.isLocked and not self.isShareLock:
             raise LockError("Already locked by ourselves")
 
-        fcntl.lockf(self.lock_fd, fcntl.LOCK_EX)
-        self.isLocked = True
+        try:
+            fcntl.lockf(self.lock_fd, fcntl.LOCK_EX)
+            self.isLocked = True
+            self.isShareLock = False
+        except OSError:
+            raise LockError("Read only file descriptor?")
 
     def unlock(self) -> "None":
         if self.isLocked:
@@ -124,29 +156,61 @@ class RWFileLock(object):
             self.unlock()
 
     def __del__(self) -> "None":
-        try:
-            os.close(self.lock_fd)
-        except:
-            pass
+        if self.should_close:
+            try:
+                os.close(self.lock_fd)
+            except:
+                pass
 
 
 if __name__ == "__main__":
     lock = RWFileLock("/tmp/rwfilelock.lock")
+    # fH = open("/etc/passwd", mode="r")
+    # lock = RWFileLock(fH)
 
-    print("Trying getting lock")
+    import datetime
     import sys
+    import time
+
+    print(f"[{datetime.datetime.now().isoformat()}] Trying getting lock {os.getpid()}")
 
     sys.stdout.flush()
     try:
-        if len(sys.argv) > 1:
+        if len(sys.argv) == 3:
+            lock.r_blocking_lock()
+            print(f"[{datetime.datetime.now().isoformat()}] Got shlock {os.getpid()}")
+            time.sleep(5)
+            print(
+                f"[{datetime.datetime.now().isoformat()}] Trying to switch exlock {os.getpid()}"
+            )
+            lock.w_blocking_lock()
+            print(f"[{datetime.datetime.now().isoformat()}] Got exlock {os.getpid()}")
+            time.sleep(3)
+            print(
+                f"[{datetime.datetime.now().isoformat()}] Releasing exlock {os.getpid()}"
+            )
+            lock.unlock()
+        elif len(sys.argv) == 2:
             with lock.exclusive_lock():
-                import time
+                print(
+                    f"[{datetime.datetime.now().isoformat()}] Got exlock {os.getpid()}"
+                )
 
                 time.sleep(10)
+                print(
+                    f"[{datetime.datetime.now().isoformat()}] Releasing exlock {os.getpid()}"
+                )
         else:
             with lock.shared_lock():
-                import time
+                print(
+                    f"[{datetime.datetime.now().isoformat()}] Got shlock {os.getpid()}"
+                )
 
-                time.sleep(10)
+                time.sleep(7)
+                print(
+                    f"[{datetime.datetime.now().isoformat()}] Releasing shlock {os.getpid()}"
+                )
     except LockError:
-        print("Unable to get lock")
+        print(
+            f"[{datetime.datetime.now().isoformat()}] Unable to get lock {os.getpid()}"
+        )

@@ -29,7 +29,7 @@ from .rw_file_lock import (
 )
 
 # https://www.python.org/dev/peps/pep-0396/
-__version__ = version = "0.1.2"
+__version__ = version = "0.2.0"
 __author__ = "José M. Fernández <https://orcid.org/0000-0002-4806-5140>"
 __copyright__ = "© 2020-2024 Barcelona Supercomputing Center (BSC), ES"
 __license__ = "LGPLv2"
