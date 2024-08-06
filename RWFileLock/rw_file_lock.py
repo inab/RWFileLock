@@ -139,7 +139,7 @@ class RWFileLock(object):
     @contextlib.contextmanager
     def shared_blocking_lock(self) -> "Iterator[None]":
         try:
-            self.r_lock()
+            self.r_blocking_lock()
             yield
         finally:
             self.unlock()
