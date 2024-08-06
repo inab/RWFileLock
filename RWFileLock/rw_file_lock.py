@@ -98,8 +98,10 @@ class RWFileLock(object):
             fcntl.lockf(self.lock_fd, (fcntl.LOCK_EX | fcntl.LOCK_NB))
             self.isLocked = True
             self.isShareLock = False
-        except IOError:
-            raise LockError("Already locked by others")
+        except IOError as ioe:
+            raise LockError("Already locked by others") from ioe
+        except OSError as ose:
+            raise LockError("Read only file descriptor?") from ose
 
     def w_blocking_lock(self) -> "None":
         if self.isLocked and not self.isShareLock:
@@ -109,15 +111,18 @@ class RWFileLock(object):
             fcntl.lockf(self.lock_fd, fcntl.LOCK_EX)
             self.isLocked = True
             self.isShareLock = False
-        except OSError:
-            raise LockError("Read only file descriptor?")
+        except OSError as ose:
+            raise LockError("Read only file descriptor?") from ose
 
     def unlock(self) -> "None":
         if self.isLocked:
             try:
                 fcntl.lockf(self.lock_fd, fcntl.LOCK_UN)
-            except IOError:
-                raise LockError("Already locked by others")
+            except OSError as ose:
+                if self.should_close:
+                    raise LockError("Unexpected unlocking error") from ose
+            except IOError as ioe:
+                raise LockError("Unexpected unlocking error") from ioe
             finally:
                 self.isLocked = False
         else:
